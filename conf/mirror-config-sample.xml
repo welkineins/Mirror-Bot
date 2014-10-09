@@ -3,21 +3,36 @@
 	<Common>
 		<owner>YOUR_NICK</owner>
 		<flood>1</flood>
-		<access>op</access>
+		<access>voice</access>
 		<activator>!</activator>
-		<ignore>chanserv, vaughn, moobot, nightbot</ignore>
+		<ignore>chanserv, mybot</ignore>
+		<sync_mode>one-way</sync_mode>
 	</Common>
 	<Left>
-		<mirror_name>MY_NETWORK_NAME</mirror_name>
-		<server>my.irc.network.com</server>
-		<port>6667</port>
-		<channel>#mychannel</channel>
-		<nick>TwitchChat</nick>
-		<password>YOUR_NICK_PASS</password>
+		<mirror_name>MY_NETWORK_SORUCE</mirror_name>
+		<server>irc.freenode.net</server>
+		<port>6697</port>
+		<ssl>1</ssl>
+		<channel>#my-source-channel</channel>
+		<nick>SourceBot</nick>
+		<password>SERVER_PASSWORD</password>
 		<sync_topic>0</sync_topic>
 		<nick_decoration>&lt;&gt;</nick_decoration>
-		<prevent_dupes>1</prevent_dupes>
+		<prevent_dupes>0</prevent_dupes>
 	</Left>
+	<Right>
+		<mirror_name>MY_NETWORK_TARGET</mirror_name>
+		<server>irc.freenode.net</server>
+		<port>6697</port>
+		<ssl>1</ssl>
+		<channel>#my-target-channel</channel>
+		<nick>TargetBot</nick>
+		<password>SERVER_PASSWORD</password>
+		<sync_topic>0</sync_topic>
+		<nick_decoration>&lt;&gt;</nick_decoration>
+		<prevent_dupes>0</prevent_dupes>
+	</Right>
+	<!--
 	<Right>
 		<mirror_name>Twitch</mirror_name>
 		<server>irc.twitch.tv</server>
@@ -30,4 +45,5 @@
 		<queue_length>5</queue_length>
 		<prevent_dupes>1</prevent_dupes>
 	</Right>
+	-->
 </BotConfig>

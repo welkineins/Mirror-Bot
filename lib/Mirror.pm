@@ -23,7 +23,7 @@ sub get_users {
 	my $nicks = $self->channel_data( $channel );
 	my $users = {};
 	my $irc = $self->pocoirc();
-	
+
 	foreach my $nick (keys %$nicks) {
 		$users->{ lc($nick) } = {
 			%{$nicks->{$nick}},
@@ -47,15 +47,16 @@ sub log_debug {
 	# print message to debug log
 	my $self = shift;
 	my $msg = shift;
-	
+
 	my $log_file = $self->{params}->{log_file} || 'logs/debug.log';
-	my $fh = new FileHandle ">>$log_file";
+	mkdir(dirname($log_file));
+	my $fh = FileHandle->new(">> $log_file");
 	my $id = $self->{server};
-	
+
 	$msg =~ s/\n/ /g;
 	$msg =~ s/\s+/ /g;
-	
-	my $line = '[' . join('][', 
+
+	my $line = '[' . join('][',
 		time(),
 		(scalar localtime()),
 		$$,
@@ -63,10 +64,10 @@ sub log_debug {
 		$self->{nick},
 		trim($msg)
 	) . "]\n";
-	
-	$fh->print( $line );
+
+	$fh->print($line);
 	$fh->close();
-	
+
 	if ($self->{params}->{debug}) {
 		# echo log to console
 		print $line;
@@ -79,9 +80,9 @@ sub mirror_exit {
 	my $self = shift;
 	return if $self->{_shutdown_flag};
 	$self->{_shutdown_flag} = 1;
-	
+
 	$self->log_debug("Shutting down");
-	
+
 	if ($self->{mirror}) {
 		delete $self->{mirror}->{mirror};
 		$self->{mirror}->{_shutdown_flag} = 1;
@@ -95,26 +96,26 @@ sub crash {
 	# log crash and exit
 	my $self = shift;
 	my $msg = shift;
-	
-	$self->log_debug( "CRASH: $@" ); 
+
+	$self->log_debug( "CRASH: $@" );
 	$self->mirror_exit();
 }
 
 sub check_admin {
 	# check if user is a bot admin
 	my ($self, $username) = @_;
-	
+
 	$username = lc($username);
 	if ($username eq $self->{params}->{owner}) { return 1; } # bot owner ALWAYS has bot admin privs
-		
+
 	my $min_access = $self->{params}->{access} || 'op';
 	my $users = $self->get_users();
 	my $user = $users->{$username};
-	
+
 	if (!$user) { return 0; }
 	if ($user->{$min_access}) { return 1; } # exact match on min req.
 	if ($user->{founder}) { return 1; } # nothing higher than founder
-	
+
 	if ($min_access eq 'op') {
 		if ($user->{admin}) { return 1; } # admin is higher than op.
 	}
@@ -127,7 +128,7 @@ sub check_admin {
 		if ($user->{op}) { return 1; } # op is higher than half
 		if ($user->{admin}) { return 1; } # admin is higher than op.
 	}
-	
+
 	return 0;
 }
 
@@ -136,7 +137,7 @@ sub irc_cmd {
 	my $self = shift;
 	my $cmd = shift;
 	$self->log_debug("Executing IRC command: $cmd (" . join(', ', @_) . ")");
-	
+
 	$poe_kernel->post(
         $self->{IRCNAME},
         $cmd,
@@ -147,13 +148,13 @@ sub irc_cmd {
 sub bot_cmd {
 	# execute bot command from text entered
 	my ($self, $text, $args) = @_;
-	
+
 	# verify user's bot access
 	if (!$self->check_admin(lc($args->{who}))) { return undef; } # not enough privs to command ze bot
-	
+
 	# some commands may only be requested by the bot owner
 	my $is_owner = (lc($args->{who}) eq lc($self->{params}->{owner}));
-	
+
 	if (($text =~ /^identify$/i) && $is_owner) {
 		# try to identify ourself (should happen automatically on connect)
 		$self->log_debug( "Attempting to identify ourselves with NickServ" );
@@ -253,11 +254,11 @@ sub bot_cmd {
 		# pause mirroring
 		if (!$self->{paused}) {
 			$self->log_debug( "Pausing mirror" );
-			
+
 			$self->{paused} = 1;
 			if ($self->{mirror}) { $self->{mirror}->{paused} = 1; }
 			$self->{say_queue} = [];
-			
+
 			$self->say(
 				channel => nch( $self->{params}->{channel} ),
 				body => "Mirroring paused"
@@ -268,10 +269,10 @@ sub bot_cmd {
 		# resume mirroring
 		if ($self->{paused}) {
 			$self->log_debug( "Resuming mirror" );
-			
+
 			$self->{paused} = 0;
 			if ($self->{mirror}) { $self->{mirror}->{paused} = 0; }
-			
+
 			$self->say(
 				channel => nch( $self->{params}->{channel} ),
 				body => "Mirroring resumed"
@@ -300,7 +301,7 @@ sub bot_cmd {
 		$result =~ s/\n/ /g; $result =~ s/\s+/ /g;
 		$result = trim($result);
 		if (length($result)) { $self->say( who => $args->{who}, channel => nch($args->{channel}), body => $result ); }
-	}	
+	}
 }
 
 ##
@@ -310,7 +311,7 @@ sub bot_cmd {
 sub init {
 	# called when the bot is created, as part of new(). Return a true value for a successful init, or undef if you failed, in which case new() will die.
 	my $self = shift;
-	
+
 	my $version = $self->{version} = get_version();
 	$self->log_debug( 'MirrorBot v' . $version->{Major} . '-' . $version->{Minor} . ' (' . $version->{Branch} . ') starting up');
 	$self->log_debug( "Initializing mirror: " . $self->{params}->{mirror_name} );
@@ -321,10 +322,10 @@ sub init {
 sub connected {
 	# An optional method to override, gets called after we have connected to the server
 	my $self = shift;
-	
+
 	eval {
 		$self->log_debug( "in connected()\n" );
-		
+
 		if ($self->{params}->{password}) {
 			$self->log_debug( "Trying to idenify ourselves with NickServ (".$self->{params}->{nick}.")\n" );
 			$self->say(
@@ -335,7 +336,7 @@ sub connected {
 		}
 	};
 	if ($@) { $self->crash($@); }
-	
+
 	return undef;
 }
 
@@ -344,21 +345,21 @@ sub said {
 	my $self = shift;
 	my $args = shift;
 	my $response = undef;
-	
+
 	eval {
 		$args->{who_disp} = $args->{who}; # save original nick for display purposes
 		if ($self->{ignore}->{lc($args->{who})}) { return undef; } # ignore this user
-		
+
 		$self->log_debug( "in said(): " . Dumper($args) );
 		$self->{last_said} = $args;
-		
+
 		my $text = trim($args->{raw_body});
 		my $activator = $self->{params}->{activator};
-		
+
 		if (substr($text, 0, 1) eq $activator) {
 			# first character is activator, so exec bot command
 			$text = substr($text, 1);
-			
+
 			if (($text =~ s/^(mirror|jtv|twitch)\s+//) || ($text =~ /^(msg|say|kick|timeout|ban|unban)/)) {
 				# send cmd thru mirror to bot on other side
 				if ($self->{mirror}) {
@@ -378,7 +379,7 @@ sub said {
 				#	body => 'JTV/Twitch Notice: ' . $args->{raw_body}
 				#);
 				$self->log_debug( "Received JTV/Twitch Notice: " . $args->{raw_body} );
-				
+
 				if ($self->{mirror}) {
 					# manually echo notice to mirror, as bot is ignored by mirror (by design)
 					$self->{mirror}->say(
@@ -386,20 +387,20 @@ sub said {
 						body => 'JTV/Twitch Notice: ' . $args->{raw_body}
 					);
 				}
-				
+
 				return undef;
 			} # jtv notice
-			
+
 			if ($self->{mirror}) {
 				# if private message, do not pass to mirror
 				if ($args->{channel} eq 'msg') { return undef; } # ignore
-				
+
 				$self->{mirror}->mirror_say( $args );
 			} # mirror
 		}
 	};
 	if ($@) { $self->crash($@); }
-	
+
 	return $response;
 }
 
@@ -410,19 +411,19 @@ sub mirror_say {
 	my $who = $args->{who};
 	my $chan = nch( $self->{params}->{channel} );
 	my $text = trim($args->{raw_body});
-	
+
 	if ($self->{ignore}->{lc($who)}) { return undef; } # ignore
 	if ($text !~ /\S/) { return undef; } # ignore whitespace messages
 	if ($self->{paused}) { return undef; } # ignore in paused mode
-	
+
 	$self->log_debug( "in mirror_said(): " . Dumper($args) );
-	
+
 	my $body = '';
 	if ($args->{is_emote}) { $body = '*' . $who . ' ' . $text; }
-	else { 
-		$body = substr($self->{params}->{nick_decoration}, 0, 1) . $who . substr($self->{params}->{nick_decoration}, 1, 1) . ' ' . $text; 
+	else {
+		$body = substr($self->{params}->{nick_decoration}, 0, 1) . $who . substr($self->{params}->{nick_decoration}, 1, 1) . ' ' . $text;
 	}
-	
+
 	if ($self->{params}->{prevent_dupes}) {
 		my $dupe_key = "$chan $body";
 		if ($self->{last_say_str} && ($self->{last_say_str} eq $dupe_key)) {
@@ -431,12 +432,12 @@ sub mirror_say {
 		}
 		$self->{last_say_str} = $dupe_key;
 	}
-	
+
 	if ($self->{params}->{throttle}) {
 		my $queue_len = scalar @{$self->{say_queue}};
 		my $min_interval = 1 / $self->{params}->{throttle};
 		my $now = time();
-		
+
 		if ((!$self->{last_say_time} || ($now - $self->{last_say_time} > $min_interval)) && !$queue_len) {
 			$self->{last_say_time} = $now;
 		}
@@ -455,18 +456,18 @@ sub mirror_say {
 			return;
 		}
 	}
-	
+
 	$self->say(
 		channel => $chan,
 		body => $body
-	);	
+	);
 }
 
 sub emoted {
 	# someone emoted
 	my $self = shift;
 	my $args = shift;
-	
+
 	$args->{is_emote} = 1;
     return $self->said($args);
 }
@@ -475,65 +476,65 @@ sub noticed {
 	# received notice
     my $self = shift;
 	my $args = shift;
-	
+
 	$args->{is_notice} = 1;
     return $self->said($args);
 }
 
 sub chanjoin {
-	# Called when someone joins a channel. It receives a hashref argument similar to the one received by said(). 
+	# Called when someone joins a channel. It receives a hashref argument similar to the one received by said().
 	# The key 'who' is the nick of the user who joined, while 'channel' is the channel they joined.
 	my $self = shift;
 	my $args = shift;
 	if ($self->{ignore}->{lc($args->{who})}) { return; } # ignore
-	
+
 	eval {
 		$self->log_debug( "in chanjoin(): " . Dumper($args) );
-		
+
 		$args->{who_disp} = $args->{who}; # save original nick for display purposes
 		$args->{who} = lc($args->{who});
 		if ($self->{ignore}->{$args->{who}}) { return undef; } # ignore this user
-		
+
 		if ($self->{mirror}) {
 			$self->{mirror}->mirror_chanjoin($args);
 		}
 	};
 	if ($@) { $self->crash($@); }
-	
+
 	return undef;
 }
 
 sub mirror_chanjoin {
 	# pass chanjoin along to mirror
 	my $self = shift;
-	my $args = shift;	
+	my $args = shift;
 	my $who = lc($args->{who});
 	if ($self->{ignore}->{$who}) { return; } # ignore
-	
+
 	$self->log_debug( "in mirror_chanjoin(): " . Dumper($args) );
 	$self->log_debug( $self->{mirror}->{params}->{mirror_name} . ' user "' . $args->{who_disp} . '" has joined.' );
 }
 
 sub chanpart {
-	# Called when someone parts a channel. It receives a hashref argument similar to the one received by said(). 
+	# Called when someone parts a channel. It receives a hashref argument similar to the one received by said().
 	# The key 'who' is the nick of the user who parted, while 'channel' is the channel they parted.
 	my $self = shift;
 	my $args = shift;
 	# if ($self->{ignore}->{lc($args->{who})}) { return; } # ignore
-	
+
 	eval {
 		$self->log_debug( "in chanpart(): " . Dumper($args) );
-		
+
 		$args->{who_disp} = $args->{who}; # save original nick for display purposes
 		$args->{who} = lc($args->{who});
 		if ($self->{ignore}->{$args->{who}}) { return undef; } # ignore this user
-		
+
 		if ($self->{mirror}) {
 			$self->{mirror}->mirror_chanpart($args);
 		}
 	};
 	if ($@) { $self->crash($@); }
-	
+
 	return undef;
 }
 
@@ -543,7 +544,7 @@ sub mirror_chanpart {
 	my $args = shift;
 	my $who = lc($args->{who});
 	# if ($self->{ignore}->{$who}) { return; } # ignore
-	
+
 	$self->log_debug( "in mirror_chanpart(): " . Dumper($args) );
 	$self->log_debug( $self->{mirror}->{params}->{mirror_name} . ' user "' . $args->{who_disp} . '" has left.' );
 }
@@ -552,16 +553,16 @@ sub got_names {
 	# Whenever we have been given a definitive list of 'who is in the channel', this function will be called. It receives a hash reference as an argument. The key 'channel' will be the channel we have information for, 'names' is a hashref where the keys are the nicks of the users, and the values are more hashes, containing the two keys 'op' and 'voice', indicating if the user is a chanop or voiced respectively.
 	my $self = shift;
 	my $args = shift;
-	
+
 	eval {
 		$self->log_debug( "in got_names(): " . Dumper($args) );
-		
+
 		if ($self->{mirror}) {
 			$self->{mirror}->mirror_got_names($args);
 		}
 	};
 	if ($@) { $self->crash($@); }
-	
+
 	return undef;
 }
 
@@ -570,7 +571,7 @@ sub mirror_got_names {
 	my $self = shift;
 	my $args = shift;
 	my $names = $args->{names} || {};
-	
+
 	$self->log_debug( "in mirror_got_names(): " . Dumper($args) );
 }
 
@@ -578,17 +579,17 @@ sub topic {
 	# Called when the topic of the channel changes. It receives a hashref argument. The key 'channel' is the channel the topic was set in, and 'who' is the nick of the user who changed the channel, 'topic' will be the new topic of the channel.
 	my $self = shift;
 	my $args = shift;
-	
+
 	eval {
 		$self->log_debug( "in topic(): " . Dumper($args) );
-		
+
 		if ($self->{mirror} && $self->{params}->{sync_topic}) {
 			# send topic to mirror
 			$self->{mirror}->mirror_topic( $args );
 		}
 	};
 	if ($@) { $self->crash($@); }
-	
+
 	return undef;
 }
 
@@ -596,7 +597,7 @@ sub mirror_topic {
 	# set topic in mirror
 	my $self = shift;
 	my $args = shift;
-	
+
 	if ($self->{params}->{jtv}) {
 		# jtv topic
 		$self->say(
@@ -621,16 +622,16 @@ sub nick_change {
 	my $self = shift;
 	my $args = { old_nick => shift @_, new_nick => shift @_ };
 	# if ($self->{ignore}->{lc($args->{old_nick})}) { return; } # ignore
-	
+
 	eval {
 		$self->log_debug( "in nick_change(): " . Dumper($args) );
-		
+
 		if ($self->{mirror}) {
 			$self->{mirror}->mirror_nick_change($args);
 		}
 	};
 	if ($@) { $self->crash($@); }
-	
+
 	return undef;
 }
 
@@ -639,9 +640,9 @@ sub mirror_nick_change {
 	my $self = shift;
 	my $args = shift;
 	# if ($self->{ignore}->{lc($args->{old_nick})}) { return; } # ignore
-	
+
 	$self->log_debug( "in mirror_nick_change(): " . Dumper($args) );
-	
+
 	$self->notice(
 		channel => nch( $self->{params}->{channel} ),
 		body => $self->{mirror}->{params}->{mirror_name} . ' user "' . $args->{old_nick} . '" is now known as "' . $args->{new_nick} . '".'
@@ -654,16 +655,16 @@ sub kicked {
 	my $self = shift;
 	my $args = shift;
 	# if ($self->{ignore}->{lc($args->{kicked})}) { return; } # ignore
-	
+
 	eval {
 		$self->log_debug( "in kicked(): " . Dumper($args) );
-		
+
 		if ($self->{mirror}) {
 			$self->{mirror}->mirror_kicked($args);
 		}
 	};
 	if ($@) { $self->crash($@); }
-	
+
 	return undef;
 }
 
@@ -672,9 +673,9 @@ sub mirror_kicked {
 	my $self = shift;
 	my $args = shift;
 	# if ($self->{ignore}->{lc($args->{kicked})}) { return; } # ignore
-	
+
 	$self->log_debug( "in mirror_kicked(): " . Dumper($args) );
-	
+
 	$self->notice(
 		channel => nch( $self->{params}->{channel} ),
 		body => $self->{mirror}->{params}->{mirror_name} . ' user "' . $args->{kicked} . '" was kicked by ' . $args->{who} . '.'
@@ -684,10 +685,10 @@ sub mirror_kicked {
 sub tick {
 	# This is an event called every regularly. The function should return the amount of time until the tick event should next be called.
 	my $self = shift;
-	
+
 	eval {
 		# $self->log_debug( "in tick()\n" );
-		
+
 		if (scalar @{$self->{say_queue}}) {
 			my $min_interval = 1 / $self->{params}->{throttle};
 			my $now = time();
@@ -697,7 +698,7 @@ sub tick {
 				$self->say( %$say_args );
 			}
 		} # say queue
-		
+
 		# also check for daily maint here
 		if ($self->{maint_enabled}) {
 			my $day_code = yyyy_mm_dd( time() );
@@ -709,7 +710,7 @@ sub tick {
 		}
 	};
 	if ($@) { $self->crash($@); }
-	
+
 	return 0.1;
 }
 
@@ -718,13 +719,13 @@ sub run_daily_maintenance {
 	# runs once a day at midnight
 	my $self = shift;
 	my $now = time();
-	
+
 	$self->log_debug("Starting daily maintenance run");
-	
+
 	# rotate logs into daily gzip archives
 	$self->log_debug("Rotating logs");
 	$self->rotate_logs();
-	
+
 	$self->log_debug("Daily maintenance complete");
 }
 
@@ -735,13 +736,13 @@ sub rotate_logs {
 	my $archive_dir = $self->{params}->{log_archive_dir} || 'logs/archive';
 	my $logs = [ glob('logs/*.log') ];
 	my $gzip_bin = find_bin('gzip');
-	
+
 	foreach my $log_file (@$logs) {
 		my $log_category = basename($log_file); $log_category =~ s/\.\w+$//;
 		my $log_archive = $archive_dir . '/' . $log_category . '/' . $yyyy_mm_dd . '.log';
-		
+
 		$self->log_debug("Maint: Archiving log: $log_file to $log_archive.gz");
-		
+
 		# add a message at the bottom of the log, in case someone is live tailing it.
 		my $fh = FileHandle->new( ">>$log_file" );
 		if ($fh) {
@@ -749,7 +750,7 @@ sub rotate_logs {
 			$fh->print("\n# Rotating log to $log_archive.gz at $nice_time\n");
 		}
 		$fh->close();
-		
+
 		if (make_dirs_for( $log_archive )) {
 			if (rename($log_file, $log_archive)) {
 				my $output = `$gzip_bin $log_archive 2>&1`;
@@ -770,12 +771,12 @@ sub rotate_logs {
 sub help {
 	# This is the text that the bot will respond to if someone simply says help to it.
 	my $self = shift;
-	
+
 	eval {
 		$self->log_debug( "in help()\n" );
 	};
 	if ($@) { $self->crash($@); }
-	
+
 	return "This bot mirrors all chat activity to/from another IRC server.  That's it!\n";
 }
 
@@ -785,16 +786,16 @@ sub userquit {
 	my $self = shift;
 	my $args = shift;
 	# if ($self->{ignore}->{lc($args->{who})}) { return; } # ignore
-	
+
 	eval {
 		$self->log_debug( "in userquit(): " . Dumper($args) );
-		
+
 		if ($self->{mirror}) {
 			$self->{mirror}->mirror_userquit($args);
 		}
 	};
 	if ($@) { $self->crash($@); }
-	
+
 	return undef;
 }
 
@@ -803,7 +804,7 @@ sub mirror_userquit {
 	my $self = shift;
 	my $args = shift;
 	if ($self->{ignore}->{lc($args->{who})}) { return; } # ignore
-	
+
 	$self->log_debug( "in mirror_userquit(): " . Dumper($args) );
 	$self->log_debug( $self->{mirror}->{params}->{mirror_name} . ' user "' . $args->{who} . '" has left (' . $args->{body} . ').' );
 }

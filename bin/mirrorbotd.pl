@@ -3,7 +3,7 @@
 ##
 # MirrorBot 1.0
 # Copyright (c) 2011 - 2014 by Joseph Huckaby
-# Source Code released under the MIT License: 
+# Source Code released under the MIT License:
 # http://www.opensource.org/licenses/mit-license.php
 ##
 
@@ -15,18 +15,18 @@ use Cwd qw/abs_path/;
 use Carp ();
 use POSIX qw/:sys_wait_h setsid/;
 use POE;
+use FindBin;
+FindBin::again();
 
 $| = 1;
 
-# figure out our base dir and cd into it
-my $base_dir = dirname(dirname(abs_path($0)));
-chdir( $base_dir );
+chdir("$FindBin::Bin/../");
 
 # load our modules
-push @INC, "$base_dir/lib";
-eval "use VersionInfo;";
-eval "use Tools;";
-eval "use Mirror;";
+use lib "$FindBin::Bin/../lib";
+use VersionInfo;
+use Tools;
+use Mirror;
 
 $| = 1;
 
@@ -56,9 +56,9 @@ if ($cmdline_args->{debug}) {
 else {
 	# not running in cmd-line debug mode, so fork daemon process, write pid file
 	become_daemon();
-	
+
 	# write pid file
-	save_file( 'logs/pid.txt', $$ );
+	save_file('logs/pid.txt', $$);
 }
 
 my $bots = [];
@@ -67,61 +67,53 @@ my $bots = [];
 foreach my $params ($config->{Left}, $config->{Right}) {
 	# copy in common params
 	foreach my $key (keys %{$config->{Common}}) { $params->{$key} = $config->{Common}->{$key}; }
-	
+
 	# setup ignore list
 	my $ignore = {};
 	if ($params->{ignore}) {
 		$ignore = { map { $_ => 1; } split(/\W+/, $params->{ignore} || '') };
 	}
-	
+
 	# detect justin.tv server which enables special behavior
 	$params->{jtv} = ($params->{server} =~ /\.(jtvirc|twitch)\./) ? 1 : 0;
 
 	# with all known options
 	my $bot = Bot::BasicBot::Mirror->new(
-	
-		params => $params,
-
-		server => $params->{server},
-		port	 => $params->{port},
-		password => $params->{server_password} || undef,
+		params	 => $params,
+		server 	 => $params->{server},
+		port	 => $params->{port} || 6667,
+		ssl		 => $params->{ssl} || 0,
+		password => $params->{server_password} || undef, # server password
 		channels => [ split(/\s+/, $params->{channel}) ],
-	
-		nick			=> $params->{nick},
-		# alt_nicks => ["bbot", "simplebot"],
-		username	=> $params->{username} || $params->{nick},
-		name			=> $params->{name} || $params->{nick},
-	
-		# ignore_list => [qw(dipsy dadadodo laotse)],
-
-		charset => "utf-8", # charset the bot assumes the channel is using	
-		
-		no_run => 1, # do not call POE::Kernel->run automatically
-		
-		ignore => $ignore,
-				
-		# send messages to IRC at FULL SPEED
-		flood => $params->{flood} || 0,
-		
+		nick	 => $params->{nick},
+		username => $params->{username} || $params->{nick},
+		name	 => $params->{name} || $params->{nick},
+		charset  => "utf8", # charset the bot assumes the channel is using
+		no_run	 => 1, # do not call POE::Kernel->run automatically
+		ignores  => $ignore,
+		flood	 => $params->{flood} || 0,
 		# throttle control, dupe control
-		last_say_str => '',
+		last_say_str  => '',
 		last_say_time => 0,
-		say_queue => []
+		say_queue 	  => []
 	);
-	
+
 	push @$bots, $bot;
 }
 
 # only one bot needs to run daily maintenance
 $bots->[0]->{maint_enabled} = 1;
 
-# each bot ignores the other
-$bots->[0]->{ignore}->{ lc($bots->[1]->{nick}) } = 1;
-$bots->[1]->{ignore}->{ lc($bots->[0]->{nick}) } = 1;
-
 # connect the bots together
 $bots->[0]->{mirror} = $bots->[1];
-$bots->[1]->{mirror} = $bots->[0];
+
+if ($config->{Common}->{sync_mode} eq 'two-way') {
+	$bots->[1]->{mirror} = $bots->[0];
+
+	# each bot ignores the other
+	$bots->[0]->{ignore}->{ lc($bots->[1]->{nick}) } = 1;
+	$bots->[1]->{ignore}->{ lc($bots->[0]->{nick}) } = 1;
+}
 
 $SIG{'INT'} = $SIG{'TERM'} = sub {
 	# catch termination signal or ctrl-c and perform clean shutdown
@@ -130,7 +122,7 @@ $SIG{'INT'} = $SIG{'TERM'} = sub {
 	foreach my $bot (@$bots) {
 		if (!$bot->{_shutdown_flag}) {
 			$bot->{_shutdown_flag} = 1;
-			$bot->shutdown( $bot->quit_message() ); 
+			$bot->shutdown( $bot->quit_message() );
 		}
 	}
 	alarm 0;
@@ -148,7 +140,7 @@ unlink('logs/pid.txt');
 foreach my $bot (@$bots) {
 	if ($bot->{request_reload}) {
 		sleep 1;
-		exec( $0, @orig_argv );
+		exec($0, @orig_argv);
 		exit();
 	}
 }
@@ -162,12 +154,12 @@ sub become_daemon {
 	my $pid = fork();
 	if (!defined($pid)) { die "Error: Cannot fork daemon process: $!\n"; }
 	if ($pid) { exit(0); }
-	
+
 	setsid();
-	open( STDIN, "</dev/null" );
-	open( STDOUT, ">/dev/null" );
-	umask( 0 );
-	
+	open(STDIN, "</dev/null");
+	open(STDOUT, ">/dev/null");
+	umask(0);
+
 	return $$;
 }
 
