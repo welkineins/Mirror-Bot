@@ -9,7 +9,8 @@ use HTTP::Date;
 use POE;
 use Tools;
 use Time::HiRes qw/time sleep/;
-use URI::Escape;
+use LWP::UserAgent;
+use Encode;
 
 use VersionInfo;
 
@@ -394,8 +395,13 @@ sub said {
 			if ($self->{mirror}) {
 				# if private message, do not pass to mirror
 				if ($args->{channel} eq 'msg') { return undef; } # ignore
-
-				$self->{mirror}->mirror_say( $args );
+				my $req = HTTP::Request->new(POST => "https://synology-cat.slack.com/services/hooks/slackbot?token=xwDmmk98Hugb2pOBkdmkzJBN&channel=%23irc");
+				$req->content_type("text/plain; charset='utf8'");
+				$req->content(encode_utf8("<".$args->{who_disp}."> ".$args->{raw_body}));
+				my $ua = LWP::UserAgent->new(ssl_opts => {verify_hostname => 0});
+				my $resp = $ua->request($req);
+				print $resp->message;
+				#$self->{mirror}->mirror_say( $args );
 			} # mirror
 		}
 	};
